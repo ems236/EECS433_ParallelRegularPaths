@@ -25,7 +25,6 @@ object BitcoinDataLoader {
       .add(TRUST_KEY, IntegerType, nullable = false)
       .add(TIME_KEY, DoubleType, nullable = false)
 
-    val test = session.read.p
     val df = session.read.format("com.databricks.spark.csv")
       .schema(schema)
       .option("delimiter", ",")
@@ -34,7 +33,7 @@ object BitcoinDataLoader {
     return df
   }
 
-  def bitcoinGraph(session: SparkSession) : Graph[Int, Int] =
+  def bitcoinGraph(session: SparkSession) : Graph[Int, BitcoinEdgeAttribute] =
   {
     import session.sqlContext.implicits._
 
