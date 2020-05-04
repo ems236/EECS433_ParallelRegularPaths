@@ -10,8 +10,5 @@ class PathRegexTerm[ED](var edgePredicate: (ED => Boolean), var limit: Option[In
     case None => 0
   }
 
-  def doesMatch(edge: ED, iteration: Int) : Boolean = {
-    val inLimit = !hasLimit() || (hasLimit() && limitVal() >= iteration)
-    return inLimit && edgePredicate(edge)
-  }
+  def doesMatch = edgePredicate
 }
