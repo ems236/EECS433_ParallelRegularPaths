@@ -76,9 +76,12 @@ object ReachabilityResolver
           .collect()
 
         for(newVertex <- newVertices) {
-          reachNewVertices(newVertex, vertexMap, vertex._2, regexIndex)
+          val shouldAdd = reachNewVertices(newVertex, vertexMap, vertex._2, regexIndex)
           //add to new frontier
-          newFrontier(newVertex) = vertexMap(newVertex).originIds.toSet
+          if (shouldAdd)
+          {
+              newFrontier(newVertex) = vertexMap(newVertex).originIds.toSet
+          }
         }
       }
 
@@ -94,7 +97,7 @@ object ReachabilityResolver
     clearOldFrontier(vertexMap, previousIndex)
   }
 
-  def reachNewVertices(newVertex: VertexId, vertexMap: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Unit =
+  def reachNewVertices(newVertex: VertexId, vertexMap: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Boolean =
   {
     var shouldAdd = true
     //if exists in vertex set, need to update it
@@ -108,6 +111,7 @@ object ReachabilityResolver
       if(oldTermSet.size == oldLength)
       {
         //Dont visit the same vertex twice from the same places
+        //If nothing changes, don't add this to the new frontier
         shouldAdd = false
       }
       //copy same set over
