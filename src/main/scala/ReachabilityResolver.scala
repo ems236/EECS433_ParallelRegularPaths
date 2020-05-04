@@ -28,9 +28,6 @@ object ReachabilityResolver
       .collectAsMap()
     var mutable_dest_set = collection.mutable.Map(dest_set.toSeq: _*)
 
-
-
-
     //Start 1 off because not moving through the graph yet
     //is the current value that has been processed
     var currentForward = -1
@@ -41,12 +38,12 @@ object ReachabilityResolver
       if(source_set.size > dest_set.size)
       {
         currentBackward -= 1
-        expandFrontier(graph, mutable_dest_set, reachabilityQuery.pathExpression, currentBackward)
+        expandFrontier(graph, mutable_dest_set, reachabilityQuery.pathExpression, currentBackward, currentBackward + 1)
       }
       else
       {
         currentForward += 1
-        expandFrontier(graph, mutable_source_set, reachabilityQuery.pathExpression, currentForward)
+        expandFrontier(graph, mutable_source_set, reachabilityQuery.pathExpression, currentForward, currentForward - 1)
       }
     }
 
@@ -58,23 +55,23 @@ object ReachabilityResolver
      , vertexMap: mutable.Map[VertexId, TermStatus]
      , regex: Array[PathRegexTerm[ED]]
      , regexIndex: Int
-     , previousIndex: Int) =
+     , previousIndex: Int): Unit =
   {
     //take all the frontiers
     var frontier = vertexMap.filter(v => v._2.isFrontier).map(v => (v._1, v._2.originIds.toSet))
     var newFrontier: mutable.Map[VertexId, Set[VertexId]] = mutable.Map()
     val regexTerm = regex(regexIndex)
     val hasLimit = regexTerm.hasLimit()
-    val expandCount = if (hasLimit) regexTerm.limitVal() else 0
+    val expandCount = regexTerm.limitVal()
 
     //do their expansion in a while loop until its done
     var currentCount = 0
-    while (frontier.size > 0 && currentCount < expandCount)
+    while (frontier.nonEmpty && (!hasLimit || currentCount < expandCount))
     {
       for(vertex <- frontier)
       {
         val newVertices = graph.edges
-          .filter(e => e.srcId == vertex && regexTerm.doesMatch(e.attr))
+          .filter(e => e.srcId == vertex._1 && regexTerm.doesMatch(e.attr))
           .map(e => e.dstId)
           .distinct()
           .collect()
@@ -89,6 +86,8 @@ object ReachabilityResolver
       //collect new frontier into frontier
       frontier = newFrontier
       newFrontier = mutable.Map()
+
+      currentCount += 1
     }
 
 
@@ -96,7 +95,7 @@ object ReachabilityResolver
     clearOldFrontier(vertexMap, previousIndex)
   }
 
-  def reachNewVertes(newVertex: VertexId, vertexMap: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int) =
+  def reachNewVertes(newVertex: VertexId, vertexMap: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Unit =
   {
     //if exists in vertex set, need to update it
     if(vertexMap.contains(newVertex))
@@ -104,7 +103,7 @@ object ReachabilityResolver
       val oldTermSet = vertexMap(newVertex).originIds
       oldTermSet ++= originSet
       //copy same set over
-      val newTermStatus = TermStatus(true, regexIndex, oldTermSet)
+      val newTermStatus = TermStatus(isFrontier = true, regexIndex, oldTermSet)
       vertexMap(newVertex) = newTermStatus
     }
     else
@@ -112,7 +111,7 @@ object ReachabilityResolver
       //else add new vertex to vertex set
       val newSet = mutable.Set[VertexId]()
       newSet ++= originSet
-      val newTermStatus = TermStatus(true, regexIndex, newSet)
+      val newTermStatus = TermStatus(isFrontier = true, regexIndex, newSet)
       vertexMap(newVertex) = newTermStatus
     }
   }
@@ -122,11 +121,11 @@ object ReachabilityResolver
     val oldFrontiers = vertexMap.filter(v => v._2.middlestIndex == clearIndex).keySet
     for(id <- oldFrontiers)
     {
-      vertexMap(id) = TermStatus(false, clearIndex, mutable.Set())
+      vertexMap(id) = TermStatus(isFrontier = false, clearIndex, mutable.Set())
     }
   }
 
-  def intersectResults(sourceSet: VertexRDD[TermStatus], destSet: VertexRDD[TermStatus], meetIndex: Int): Array[VertexPair] =
+  def intersectResults(sourceSet: mutable.Map[VertexId, TermStatus], destSet: mutable.Map[VertexId, TermStatus], meetIndex: Int): Array[VertexPair] =
   {
     //filter both by meeting index
     //join both
