@@ -1,7 +1,6 @@
 import org.apache.spark.graphx._
-
+import org.apache.spark.sql._
 import scala.collection.mutable
-import scala.collection.mutable.Map
 
 
 case class VertexPair(source: VertexId, dest: VertexId)
@@ -13,7 +12,7 @@ case class TermStatus(isFrontier: Boolean, middlestIndex: Int, originIds: mutabl
 
 object ReachabilityResolver
 {
-  def ResolveQuery[VD, ED](graph: Graph[VD, ED], reachabilityQuery: ReachabilityQuery[VD, ED]) : Array[VertexPair] =
+  def ResolveQuery[VD, ED](session: SparkSession, graph: Graph[VD, ED], reachabilityQuery: ReachabilityQuery[VD, ED]) : Array[VertexPair] =
   {
     //Bi-directional search
     val sources = graph.vertices.filter(reachabilityQuery.sourceFilter)
@@ -47,7 +46,7 @@ object ReachabilityResolver
       }
     }
 
-    //return intersectResults(source_set, dest_set, currentBackward)
+    resultIntersection(session, mutable_source_set, mutable_dest_set, currentForward)
 
   }
 
@@ -125,11 +124,35 @@ object ReachabilityResolver
     }
   }
 
-  def intersectResults(sourceSet: mutable.Map[VertexId, TermStatus], destSet: mutable.Map[VertexId, TermStatus], meetIndex: Int): Array[VertexPair] =
+  def intersectionPointsToDF(session: SparkSession, vertexSet: mutable.Map[VertexId, TermStatus], meetIndex: Int, description: String): DataFrame =
   {
-    //filter both by meeting index
+    import session.implicits._
+
+    //filter both by meeting index and put them in a dataset
+    //flatten so every vertex paired with its origin
+    vertexSet
+      .filter(v => v._2.middlestIndex == meetIndex)
+      .flatMap(v => v._2.originIds.map(origin => (v._1, origin)))
+      .toSeq
+      .toDF("Id", description)
+  }
+
+  def resultIntersection(session: SparkSession, sourceSet: mutable.Map[VertexId, TermStatus], destSet: mutable.Map[VertexId, TermStatus], meetIndex: Int): Array[VertexPair] =
+  {
+    import session.implicits._
+    val SOURCE = "source"
+    val DEST = "dest"
+    val sourceData = intersectionPointsToDF(session, sourceSet, meetIndex, SOURCE)
+    val destData = intersectionPointsToDF(session, destSet, meetIndex, DEST)
+
     //join both
-    //cartesian product of two origin sets
+    //flatten essentially makes this cartesian product of two origin sets
     //filter duplicates
+    sourceData
+      .join(destData, "Id")
+      .select(SOURCE, DEST)
+      .distinct()
+      .map(row => VertexPair(row.getLong(0), row.getLong(1)))
+      .collect()
   }
 }
