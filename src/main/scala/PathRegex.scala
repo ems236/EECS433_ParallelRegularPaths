@@ -1,4 +1,7 @@
-class PathRegexTerm[ED](var edgePredicate: (ED => Boolean), var limit: Option[Int])
+import java.io
+
+@SerialVersionUID(1L)
+class PathRegexTerm[ED](var edgePredicate: (ED => Boolean), var limit: Option[Int]) extends Serializable
 {
   def hasLimit() = limit match {
     case Some(x) => true

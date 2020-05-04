@@ -19,7 +19,7 @@ object ReachabilitySequentialResolver
     val dests = graph.vertices.filter(reachabilityQuery.destFilter)
 
     val lastIndex = reachabilityQuery.pathExpression.length - 1
-    var source_set = sources.map(v => (v._1, TermStatus(true, -1, mutable.Set(v._1))))
+    var source_set = sources.map(v => (v._1, TermStatus(true, 0, mutable.Set(v._1))))
       .collectAsMap()
     var mutable_source_set = collection.mutable.Map(source_set.toSeq: _*)
 
@@ -29,7 +29,7 @@ object ReachabilitySequentialResolver
 
     //Start 1 off because not moving through the graph yet
     //is the current value that has been processed
-    var currentForward = -1
+    var currentForward = 0
     var currentBackward = lastIndex + 1
 
     while(currentForward < currentBackward)
@@ -37,30 +37,31 @@ object ReachabilitySequentialResolver
       if(source_set.size > dest_set.size)
       {
         currentBackward -= 1
-        expandFrontier(graph, mutable_dest_set, reachabilityQuery.pathExpression, currentBackward, currentBackward + 1)
+        expandFrontier(graph, mutable_dest_set, reachabilityQuery.pathExpression(currentBackward), currentBackward, currentBackward + 1, isForward = false)
       }
       else
       {
+        expandFrontier(graph, mutable_source_set, reachabilityQuery.pathExpression(currentForward), currentForward + 1, currentForward, isForward = true)
         currentForward += 1
-        expandFrontier(graph, mutable_source_set, reachabilityQuery.pathExpression, currentForward, currentForward - 1)
       }
     }
 
+    println(s"Parsing results, ends met at $currentForward")
     resultIntersection(session, mutable_source_set, mutable_dest_set, currentForward)
 
   }
 
   def expandFrontier[VD, ED](graph: Graph[VD, ED]
      , vertexMap: mutable.Map[VertexId, TermStatus]
-     , regex: Array[PathRegexTerm[ED]]
-     , regexIndex: Int
+     , regexTerm: PathRegexTerm[ED]
+     , reachedIndex: Int
      , previousIndex: Int
      , isForward: Boolean): Unit =
   {
+    println(s"Expanding frontier for regex term ${if (isForward) reachedIndex - 1 else reachedIndex}")
     //take all the frontiers
     var frontier = vertexMap.filter(v => v._2.isFrontier).map(v => (v._1, v._2.originIds.toSet))
     var newFrontier: mutable.Map[VertexId, Set[VertexId]] = mutable.Map()
-    val regexTerm = regex(regexIndex)
     val hasLimit = regexTerm.hasLimit()
     val expandCount = regexTerm.limitVal()
 
@@ -68,17 +69,23 @@ object ReachabilitySequentialResolver
     var currentCount = 0
     while (frontier.nonEmpty && (!hasLimit || currentCount < expandCount))
     {
+      println(s"Frontier has ${frontier.size} elements. Current is $currentCount. Limit is $expandCount")
+
       for(vertex <- frontier)
       {
-        val edgeTarget = (e: Edge[ED]) => {if (isForward) e.srcId else e.dstId}
+        println(s"Exploring from vertex ${vertex._1}")
+
+        val edgeTargetId = (e: Edge[ED]) => {if (isForward) e.srcId else e.dstId}
+        val edgeExploreId = (e: Edge[ED]) => {if (isForward) e.dstId else e.srcId}
         val newVertices = graph.edges
-          .filter(e => edgeTarget(e) == vertex._1 && regexTerm.doesMatch(e.attr))
-          .map(e => e.dstId)
+          .filter(e => edgeTargetId(e) == vertex._1 && regexTerm.doesMatch(e.attr))
+          .map(e => edgeExploreId(e))
           .distinct()
           .collect()
 
-        for(newVertex <- newVertices) {
-          val shouldAdd = reachNewVertices(newVertex, vertexMap, vertex._2, regexIndex)
+        for(newVertex <- newVertices)
+        {
+          val shouldAdd = reachNewVertex(newVertex, vertexMap, vertex._2, reachedIndex)
           //add to new frontier
           if (shouldAdd)
           {
@@ -99,7 +106,7 @@ object ReachabilitySequentialResolver
     clearOldFrontier(vertexMap, previousIndex)
   }
 
-  def reachNewVertices(newVertex: VertexId, vertexMap: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Boolean =
+  def reachNewVertex(newVertex: VertexId, vertexMap: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Boolean =
   {
     var shouldAdd = true
     //if exists in vertex set, need to update it
