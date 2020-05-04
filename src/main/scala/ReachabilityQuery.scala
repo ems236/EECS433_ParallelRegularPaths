@@ -1,1 +1,1 @@
-case class ReachabilityQuery[VD, ED](sourceFiler: (Long, VD => Boolean), destFilter: (Long, VD => Boolean), pathEpression: List[PathRegexTerm[ED]])
+//case class ReachabilityQuery[VD, ED](sourceFiler: (Long, VD => Boolean), destFilter: (Long, VD => Boolean), pathEpression: List[PathRegexTerm[ED]])
