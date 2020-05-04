@@ -60,20 +60,22 @@ object ReachabilitySequentialResolver
   {
     println(s"Expanding frontier for regex term ${if (isForward) reachedIndex - 1 else reachedIndex}")
     //take all the frontiers
-    var frontier = vertexMap.filter(v => v._2.isFrontier).map(v => (v._1, v._2.originIds.toSet))
-    var newFrontier: mutable.Map[VertexId, Set[VertexId]] = mutable.Map()
+    var currentFrontier = vertexMap.filter(v => v._2.isFrontier).map(v => (v._1, v._2.originIds.toSet))
+    val termFrontier: mutable.Map[VertexId, TermStatus] = mutable.Map()
     val hasLimit = regexTerm.hasLimit()
     val expandCount = regexTerm.limitVal()
 
+    var reachedCount = 0
+
     //do their expansion in a while loop until its done
     var currentCount = 0
-    while (frontier.nonEmpty && (!hasLimit || currentCount < expandCount))
+    var nextFrontier: mutable.Map[VertexId, Set[VertexId]] = mutable.Map()
+    while (currentFrontier.nonEmpty && (!hasLimit || currentCount < expandCount))
     {
-      println(s"Frontier has ${frontier.size} elements. Current is $currentCount. Limit is $expandCount")
-
-      for(vertex <- frontier)
+      println(s"Frontier has ${currentFrontier.size} elements. Current is $currentCount. Limit is $expandCount")
+      for(vertex <- currentFrontier)
       {
-        println(s"Exploring from vertex ${vertex._1}")
+        //println(s"Exploring from vertex ${vertex._1}")
 
         val edgeTargetId = (e: Edge[ED]) => {if (isForward) e.srcId else e.dstId}
         val edgeExploreId = (e: Edge[ED]) => {if (isForward) e.dstId else e.srcId}
@@ -85,18 +87,22 @@ object ReachabilitySequentialResolver
 
         for(newVertex <- newVertices)
         {
-          val shouldAdd = reachNewVertex(newVertex, vertexMap, vertex._2, reachedIndex)
+          println(s"New Vertex reached ${vertex._1} to ${newVertex}")
+          reachedCount += 1
+          val shouldAdd = reachNewVertex(newVertex, termFrontier, vertex._2, reachedIndex)
           //add to new frontier
           if (shouldAdd)
           {
-              newFrontier(newVertex) = vertexMap(newVertex).originIds.toSet
+              println("Adding to new frontier (should not get here)")
+              nextFrontier(newVertex) = termFrontier(newVertex).originIds.toSet
           }
         }
       }
 
+      println(s"Have reached $reachedCount")
       //collect new frontier into frontier
-      frontier = newFrontier
-      newFrontier = mutable.Map()
+      currentFrontier = nextFrontier
+      nextFrontier = mutable.Map()
 
       currentCount += 1
     }
@@ -104,36 +110,43 @@ object ReachabilitySequentialResolver
 
     //Clear all reachability info for non-frontier
     clearOldFrontier(vertexMap, previousIndex)
+    addNewFrontier(vertexMap, termFrontier)
   }
 
-  def reachNewVertex(newVertex: VertexId, vertexMap: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Boolean =
+  def reachNewVertex(newVertex: VertexId, termFrontier: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Boolean =
   {
     var shouldAdd = true
     //if exists in vertex set, need to update it
-    if(vertexMap.contains(newVertex))
+    if(termFrontier.contains(newVertex))
     {
       //Dont visit the same vertex twice from the same places
-      val oldTermSet = vertexMap(newVertex).originIds
+
+      println(s"newOriginSet $originSet")
+      val oldTermSet = termFrontier(newVertex).originIds
+      println(s"old set $oldTermSet")
       val oldLength = oldTermSet.size
       oldTermSet ++= originSet
 
       if(oldTermSet.size == oldLength)
       {
+        println("Nothing new (Shouldn't get here)")
         //Dont visit the same vertex twice from the same places
         //If nothing changes, don't add this to the new frontier
         shouldAdd = false
       }
       //copy same set over
       val newTermStatus = TermStatus(isFrontier = true, regexIndex, oldTermSet)
-      vertexMap(newVertex) = newTermStatus
+      termFrontier(newVertex) = newTermStatus
     }
     else
     {
+      println("New vertex (Shouldn't get here)")
+
       //else add new vertex to vertex set
       val newSet = mutable.Set[VertexId]()
       newSet ++= originSet
       val newTermStatus = TermStatus(isFrontier = true, regexIndex, newSet)
-      vertexMap(newVertex) = newTermStatus
+      termFrontier(newVertex) = newTermStatus
     }
 
     shouldAdd
@@ -142,9 +155,19 @@ object ReachabilitySequentialResolver
   def clearOldFrontier(vertexMap: mutable.Map[VertexId, TermStatus], clearIndex: Int): Unit =
   {
     val oldFrontiers = vertexMap.filter(v => v._2.middlestIndex == clearIndex).keySet
+    println(s"clearing frontier at $clearIndex. Has ${oldFrontiers.size} nodes")
+
     for(id <- oldFrontiers)
     {
       vertexMap(id) = TermStatus(isFrontier = false, clearIndex, mutable.Set())
+    }
+  }
+
+  def addNewFrontier(vertexMap: mutable.Map[VertexId, TermStatus], newFrontier: mutable.Map[VertexId, TermStatus]): Unit =
+  {
+    for(vertex <- newFrontier.keySet)
+    {
+      vertexMap(vertex) = newFrontier(vertex)
     }
   }
 
@@ -155,7 +178,7 @@ object ReachabilitySequentialResolver
     //filter both by meeting index and put them in a dataset
     //flatten so every vertex paired with its origin
     vertexSet
-      .filter(v => v._2.middlestIndex == meetIndex)
+      .filter(v => v._2.middlestIndex == meetIndex && v._2.originIds.size > 0)
       .flatMap(v => v._2.originIds.map(origin => (v._1, origin)))
       .toSeq
       .toDF("Id", description)
@@ -166,8 +189,11 @@ object ReachabilitySequentialResolver
     import session.implicits._
     val SOURCE = "source"
     val DEST = "dest"
+
     val sourceData = intersectionPointsToDF(session, sourceSet, meetIndex, SOURCE)
     val destData = intersectionPointsToDF(session, destSet, meetIndex, DEST)
+
+    println(s"Joining source ${sourceData.count()} to dest ${destData.count()}")
 
     //join both
     //flatten essentially makes this cartesian product of two origin sets
