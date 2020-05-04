@@ -1,5 +1,6 @@
-import org.apache.spark.graphx._
+import org.apache.spark.graphx.{VertexId, _}
 import org.apache.spark.sql._
+
 import scala.collection.mutable
 
 
@@ -7,10 +8,9 @@ case class VertexPair(source: VertexId, dest: VertexId)
 case class ReachabilityQuery[VD, ED](sourceFilter: ((VertexId, VD)) => Boolean,
                                      destFilter: ((VertexId, VD)) => Boolean,
                                      pathExpression: Array[PathRegexTerm[ED]])
-
 case class TermStatus(isFrontier: Boolean, middlestIndex: Int, originIds: mutable.Set[VertexId])
 
-object ReachabilityResolver
+object ReachabilitySequentialResolver
 {
   def ResolveQuery[VD, ED](session: SparkSession, graph: Graph[VD, ED], reachabilityQuery: ReachabilityQuery[VD, ED]) : Array[VertexPair] =
   {
@@ -54,7 +54,8 @@ object ReachabilityResolver
      , vertexMap: mutable.Map[VertexId, TermStatus]
      , regex: Array[PathRegexTerm[ED]]
      , regexIndex: Int
-     , previousIndex: Int): Unit =
+     , previousIndex: Int
+     , isForward: Boolean): Unit =
   {
     //take all the frontiers
     var frontier = vertexMap.filter(v => v._2.isFrontier).map(v => (v._1, v._2.originIds.toSet))
@@ -69,8 +70,9 @@ object ReachabilityResolver
     {
       for(vertex <- frontier)
       {
+        val edgeTarget = (e: Edge[ED]) => {if (isForward) e.srcId else e.dstId}
         val newVertices = graph.edges
-          .filter(e => e.srcId == vertex._1 && regexTerm.doesMatch(e.attr))
+          .filter(e => edgeTarget(e) == vertex._1 && regexTerm.doesMatch(e.attr))
           .map(e => e.dstId)
           .distinct()
           .collect()

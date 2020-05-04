@@ -19,6 +19,15 @@ object SimpleApp {
     println(graph.vertices.count())
     println(graph.edges.count())
 
+
+    //Send some reachability queries
+    //Should return all edges where the trust is worse than 3
+    val testRegex = new PathRegexTerm[BitcoinEdgeAttribute](e => e.trust < -3, Some(1))
+    val testQuery = ReachabilityQuery[Int, BitcoinEdgeAttribute](_ => true, _ => true, Array(testRegex))
+
+    val results = ReachabilitySequentialResolver.ResolveQuery(spark, graph, testQuery)
+    print(results.length)
+
     spark.stop()
   }
 }
