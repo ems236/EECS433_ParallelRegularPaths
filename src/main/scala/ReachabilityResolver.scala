@@ -76,7 +76,7 @@ object ReachabilityResolver
           .collect()
 
         for(newVertex <- newVertices) {
-          reachNewVertes(newVertex, vertexMap, vertex._2, regexIndex)
+          reachNewVertices(newVertex, vertexMap, vertex._2, regexIndex)
           //add to new frontier
           newFrontier(newVertex) = vertexMap(newVertex).originIds.toSet
         }
@@ -94,13 +94,22 @@ object ReachabilityResolver
     clearOldFrontier(vertexMap, previousIndex)
   }
 
-  def reachNewVertes(newVertex: VertexId, vertexMap: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Unit =
+  def reachNewVertices(newVertex: VertexId, vertexMap: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Unit =
   {
+    var shouldAdd = true
     //if exists in vertex set, need to update it
     if(vertexMap.contains(newVertex))
     {
+      //Dont visit the same vertex twice from the same places
       val oldTermSet = vertexMap(newVertex).originIds
+      val oldLength = oldTermSet.size
       oldTermSet ++= originSet
+
+      if(oldTermSet.size == oldLength)
+      {
+        //Dont visit the same vertex twice from the same places
+        shouldAdd = false
+      }
       //copy same set over
       val newTermStatus = TermStatus(isFrontier = true, regexIndex, oldTermSet)
       vertexMap(newVertex) = newTermStatus
@@ -113,6 +122,8 @@ object ReachabilityResolver
       val newTermStatus = TermStatus(isFrontier = true, regexIndex, newSet)
       vertexMap(newVertex) = newTermStatus
     }
+
+    shouldAdd
   }
 
   def clearOldFrontier(vertexMap: mutable.Map[VertexId, TermStatus], clearIndex: Int): Unit =
