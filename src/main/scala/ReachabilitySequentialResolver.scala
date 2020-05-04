@@ -8,10 +8,19 @@ case class VertexPair(source: VertexId, dest: VertexId)
 case class ReachabilityQuery[VD, ED](sourceFilter: ((VertexId, VD)) => Boolean,
                                      destFilter: ((VertexId, VD)) => Boolean,
                                      pathExpression: Array[PathRegexTerm[ED]])
-case class TermStatus(isFrontier: Boolean, middlestIndex: Int, originIds: mutable.Set[VertexId])
+//case class TermStatus(isFrontier: Boolean, middlestIndex: Int, originIds: mutable.Set[VertexId])
 
 object ReachabilitySequentialResolver
 {
+  type OriginSet = mutable.Set[VertexId]
+
+  def verticesToFrontier[VD](vertices: VertexRDD[VD]) : mutable.Map[VertexId, OriginSet] =
+  {
+    val vertexSet = vertices.map(v => (v._1, mutable.Set(v._1)))
+      .collectAsMap()
+    collection.mutable.Map(vertexSet.toSeq: _*)
+  }
+
   def ResolveQuery[VD, ED](session: SparkSession, graph: Graph[VD, ED], reachabilityQuery: ReachabilityQuery[VD, ED]) : Array[VertexPair] =
   {
     //Bi-directional search
@@ -19,13 +28,9 @@ object ReachabilitySequentialResolver
     val dests = graph.vertices.filter(reachabilityQuery.destFilter)
 
     val lastIndex = reachabilityQuery.pathExpression.length - 1
-    var source_set = sources.map(v => (v._1, TermStatus(true, 0, mutable.Set(v._1))))
-      .collectAsMap()
-    var mutable_source_set = collection.mutable.Map(source_set.toSeq: _*)
 
-    var dest_set = dests.map(v => (v._1, TermStatus(true, lastIndex + 1, mutable.Set(v._1))))
-      .collectAsMap()
-    var mutable_dest_set = collection.mutable.Map(dest_set.toSeq: _*)
+    var sourceFrontier = verticesToFrontier(sources)
+    var destFrontier = verticesToFrontier(dests)
 
     //Start 1 off because not moving through the graph yet
     //is the current value that has been processed
@@ -34,34 +39,34 @@ object ReachabilitySequentialResolver
 
     while(currentForward < currentBackward)
     {
-      if(source_set.size > dest_set.size)
+      if(sourceFrontier.size > destFrontier.size)
       {
         currentBackward -= 1
-        expandFrontier(graph, mutable_dest_set, reachabilityQuery.pathExpression(currentBackward), currentBackward, currentBackward + 1, isForward = false)
+        destFrontier = expandFrontier(graph, destFrontier, reachabilityQuery.pathExpression(currentBackward), currentBackward, isForward = false)
       }
       else
       {
-        expandFrontier(graph, mutable_source_set, reachabilityQuery.pathExpression(currentForward), currentForward + 1, currentForward, isForward = true)
+        sourceFrontier = expandFrontier(graph, sourceFrontier, reachabilityQuery.pathExpression(currentForward), currentForward + 1, isForward = true)
         currentForward += 1
       }
     }
 
     println(s"Parsing results, ends met at $currentForward")
-    resultIntersection(session, mutable_source_set, mutable_dest_set, currentForward)
+    resultIntersection(session, sourceFrontier, destFrontier, currentForward)
 
   }
 
-  def expandFrontier[VD, ED](graph: Graph[VD, ED]
-     , vertexMap: mutable.Map[VertexId, TermStatus]
-     , regexTerm: PathRegexTerm[ED]
-     , reachedIndex: Int
-     , previousIndex: Int
-     , isForward: Boolean): Unit =
+  def expandFrontier[VD, ED](
+    graph: Graph[VD, ED]
+    , currentFrontier: mutable.Map[VertexId, OriginSet]
+    , regexTerm: PathRegexTerm[ED]
+    , reachedIndex: Int
+    , isForward: Boolean): mutable.Map[VertexId, OriginSet] =
   {
     println(s"Expanding frontier for regex term ${if (isForward) reachedIndex - 1 else reachedIndex}")
     //take all the frontiers
-    var currentFrontier = vertexMap.filter(v => v._2.isFrontier).map(v => (v._1, v._2.originIds.toSet))
-    val termFrontier: mutable.Map[VertexId, TermStatus] = mutable.Map()
+    var currentIterationFrontier = currentFrontier.map(v => (v._1, v._2.toSet))
+    val newFrontier: mutable.Map[VertexId, OriginSet] = mutable.Map()
     val hasLimit = regexTerm.hasLimit()
     val expandCount = regexTerm.limitVal()
 
@@ -69,11 +74,11 @@ object ReachabilitySequentialResolver
 
     //do their expansion in a while loop until its done
     var currentCount = 0
-    var nextFrontier: mutable.Map[VertexId, Set[VertexId]] = mutable.Map()
-    while (currentFrontier.nonEmpty && (!hasLimit || currentCount < expandCount))
+    var nextIterationFrontier: mutable.Map[VertexId, Set[VertexId]] = mutable.Map()
+    while (currentIterationFrontier.nonEmpty && (!hasLimit || currentCount < expandCount))
     {
-      println(s"Frontier has ${currentFrontier.size} elements. Current is $currentCount. Limit is $expandCount")
-      for(vertex <- currentFrontier)
+      println(s"Frontier has ${currentIterationFrontier.size} elements. Current is $currentCount. Limit is $expandCount")
+      for(vertex <- currentIterationFrontier)
       {
         //println(s"Exploring from vertex ${vertex._1}")
 
@@ -89,31 +94,32 @@ object ReachabilitySequentialResolver
         {
           println(s"New Vertex reached ${vertex._1} to ${newVertex}")
           reachedCount += 1
-          val shouldAdd = reachNewVertex(newVertex, termFrontier, vertex._2, reachedIndex)
+          val shouldAdd = reachNewVertex(newVertex, newFrontier, vertex._2)
           //add to new frontier
           if (shouldAdd)
           {
               println("Adding to new frontier (should not get here)")
-              nextFrontier(newVertex) = termFrontier(newVertex).originIds.toSet
+              nextIterationFrontier(newVertex) = newFrontier(newVertex).toSet
           }
         }
       }
 
       println(s"Have reached $reachedCount")
       //collect new frontier into frontier
-      currentFrontier = nextFrontier
-      nextFrontier = mutable.Map()
+      currentIterationFrontier = nextIterationFrontier
+      nextIterationFrontier = mutable.Map()
 
       currentCount += 1
     }
 
 
     //Clear all reachability info for non-frontier
-    clearOldFrontier(vertexMap, previousIndex)
-    addNewFrontier(vertexMap, termFrontier)
+    //clearOldFrontier(currentFrontier, previousIndex)
+    //addNewFrontier(currentFrontier, termFrontier)
+    return newFrontier
   }
 
-  def reachNewVertex(newVertex: VertexId, termFrontier: mutable.Map[VertexId, TermStatus], originSet:  Set[VertexId], regexIndex: Int): Boolean =
+  def reachNewVertex(newVertex: VertexId, termFrontier: mutable.Map[VertexId, OriginSet], originSet:  Set[VertexId]): Boolean =
   {
     var shouldAdd = true
     //if exists in vertex set, need to update it
@@ -122,7 +128,7 @@ object ReachabilitySequentialResolver
       //Dont visit the same vertex twice from the same places
 
       println(s"newOriginSet $originSet")
-      val oldTermSet = termFrontier(newVertex).originIds
+      val oldTermSet = termFrontier(newVertex)
       println(s"old set $oldTermSet")
       val oldLength = oldTermSet.size
       oldTermSet ++= originSet
@@ -135,8 +141,7 @@ object ReachabilitySequentialResolver
         shouldAdd = false
       }
       //copy same set over
-      val newTermStatus = TermStatus(isFrontier = true, regexIndex, oldTermSet)
-      termFrontier(newVertex) = newTermStatus
+      termFrontier(newVertex) = oldTermSet
     }
     else
     {
@@ -145,13 +150,13 @@ object ReachabilitySequentialResolver
       //else add new vertex to vertex set
       val newSet = mutable.Set[VertexId]()
       newSet ++= originSet
-      val newTermStatus = TermStatus(isFrontier = true, regexIndex, newSet)
-      termFrontier(newVertex) = newTermStatus
+      termFrontier(newVertex) = newSet
     }
 
     shouldAdd
   }
 
+  /*
   def clearOldFrontier(vertexMap: mutable.Map[VertexId, TermStatus], clearIndex: Int): Unit =
   {
     val oldFrontiers = vertexMap.filter(v => v._2.middlestIndex == clearIndex).keySet
@@ -169,22 +174,21 @@ object ReachabilitySequentialResolver
     {
       vertexMap(vertex) = newFrontier(vertex)
     }
-  }
+  }*/
 
-  def intersectionPointsToDF(session: SparkSession, vertexSet: mutable.Map[VertexId, TermStatus], meetIndex: Int, description: String): DataFrame =
+  def intersectionPointsToDF(session: SparkSession, vertexSet: mutable.Map[VertexId, OriginSet], meetIndex: Int, description: String): DataFrame =
   {
     import session.implicits._
 
     //filter both by meeting index and put them in a dataset
     //flatten so every vertex paired with its origin
     vertexSet
-      .filter(v => v._2.middlestIndex == meetIndex && v._2.originIds.size > 0)
-      .flatMap(v => v._2.originIds.map(origin => (v._1, origin)))
+      .flatMap(v => v._2.map(origin => (v._1, origin)))
       .toSeq
       .toDF("Id", description)
   }
 
-  def resultIntersection(session: SparkSession, sourceSet: mutable.Map[VertexId, TermStatus], destSet: mutable.Map[VertexId, TermStatus], meetIndex: Int): Array[VertexPair] =
+  def resultIntersection(session: SparkSession, sourceSet: mutable.Map[VertexId, OriginSet], destSet: mutable.Map[VertexId, OriginSet], meetIndex: Int): Array[VertexPair] =
   {
     import session.implicits._
     val SOURCE = "source"
