@@ -72,22 +72,29 @@ object ReachabilityParallelResolver {
         hasChanged = true
         forwardVal = searchMessage.currentForwardIndex
         //Clone to be safe
-        sourceMap = searchMessage.newFrontSources.clone()
+        sourceMap = searchMessage.newFrontSources.clone().transform((_,_) => 0)
       }
-      else {
-        val didSourcesChange = addAllOrigins(vertexState.sourceReachability, searchMessage.newFrontSources)
+      else
+      {
+        val regexTerm = searchMessage.pathRegex(forwardVal - 1)
+        val updated = incrementMapBelowLimit(searchMessage.newFrontSources, regexTerm)
+        val didSourcesChange = addAllOrigins(vertexState.sourceReachability, updated)
         hasChanged = hasChanged || didSourcesChange
       }
     }
+
     if (searchMessage.isBackward) {
       if (searchMessage.currentBackwardIndex != backwardVal) {
         hasChanged = true
         backwardVal = searchMessage.currentBackwardIndex
         //Clone to be safe
-        destMap = searchMessage.newBackSources.clone()
+        destMap = searchMessage.newBackSources.clone().transform((_,_) => 0)
       }
-      else {
-        val didDestsChange = addAllOrigins(vertexState.destReachability, searchMessage.newBackSources)
+      else
+      {
+        val regexTerm = searchMessage.pathRegex(backwardVal)
+        val updated = incrementMapBelowLimit(searchMessage.newBackSources, regexTerm)
+        val didDestsChange = addAllOrigins(vertexState.destReachability, updated)
         hasChanged = hasChanged || didDestsChange
       }
     }
@@ -103,6 +110,12 @@ object ReachabilityParallelResolver {
       globalBackTerm,
       searchMessage.pathRegex
     )
+  }
+
+  def incrementMapBelowLimit[ED](map: mutable.Map[VertexId, Int], regexTerm: PathRegexTerm[ED]): mutable.Map[VertexId, Int] =
+  {
+    map.transform((_,increment) => increment + 1)
+      .retain((_,increment) => !regexTerm.hasLimit() || increment <= regexTerm.limitVal())
   }
 
   def vertexStateWithFlag[VD, ED](oldState: VertexState[VD, ED], flagVal: Boolean): VertexState[VD, ED] = {
