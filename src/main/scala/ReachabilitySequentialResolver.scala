@@ -98,7 +98,7 @@ object ReachabilitySequentialResolver
           //add to new frontier
           if (shouldAdd)
           {
-              println("Adding to new frontier (should not get here)")
+              println("Adding to new frontier")
               nextIterationFrontier(newVertex) = newFrontier(newVertex).toSet
           }
         }
@@ -135,7 +135,7 @@ object ReachabilitySequentialResolver
 
       if(oldTermSet.size == oldLength)
       {
-        println("Nothing new (Shouldn't get here)")
+        //println("Nothing new")
         //Dont visit the same vertex twice from the same places
         //If nothing changes, don't add this to the new frontier
         shouldAdd = false
@@ -145,7 +145,7 @@ object ReachabilitySequentialResolver
     }
     else
     {
-      println("New vertex (Shouldn't get here)")
+      //println("New vertex")
 
       //else add new vertex to vertex set
       val newSet = mutable.Set[VertexId]()
@@ -193,6 +193,14 @@ object ReachabilitySequentialResolver
     import session.implicits._
     val SOURCE = "source"
     val DEST = "dest"
+
+    println(s"Joining source ${sourceSet.keySet.size} to dest ${destSet.keySet.size}")
+
+    var i = 0
+    sourceSet.foreach(v => {
+      i += v._2.size
+      println(s"$i ${v._2} -> ${v._1}")
+    })
 
     val sourceData = intersectionPointsToDF(session, sourceSet, meetIndex, SOURCE)
     val destData = intersectionPointsToDF(session, destSet, meetIndex, DEST)
