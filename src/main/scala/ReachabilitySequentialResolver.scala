@@ -3,13 +3,6 @@ import org.apache.spark.sql._
 
 import scala.collection.mutable
 
-
-case class VertexPair(source: VertexId, dest: VertexId)
-case class ReachabilityQuery[VD, ED](sourceFilter: ((VertexId, VD)) => Boolean,
-                                     destFilter: ((VertexId, VD)) => Boolean,
-                                     pathExpression: Array[PathRegexTerm[ED]])
-//case class TermStatus(isFrontier: Boolean, middlestIndex: Int, originIds: mutable.Set[VertexId])
-
 object ReachabilitySequentialResolver
 {
   type OriginSet = mutable.Set[VertexId]
