@@ -182,10 +182,12 @@ object ReachabilitySequentialResolver
 
     //filter both by meeting index and put them in a dataset
     //flatten so every vertex paired with its origin
-    vertexSet
-      .flatMap(v => v._2.map(origin => (v._1, origin)))
+    val flattened = vertexSet
       .toSeq
-      .toDF("Id", description)
+      .flatMap(v => v._2.toSeq.map(origin => (v._1, origin)))
+
+    println(s"Flat size is ${flattened.size}")
+    flattened.toDF("Id", description)
   }
 
   def resultIntersection(session: SparkSession, sourceSet: mutable.Map[VertexId, OriginSet], destSet: mutable.Map[VertexId, OriginSet], meetIndex: Int): Array[VertexPair] =
@@ -196,11 +198,11 @@ object ReachabilitySequentialResolver
 
     println(s"Joining source ${sourceSet.keySet.size} to dest ${destSet.keySet.size}")
 
-    var i = 0
-    sourceSet.foreach(v => {
-      i += v._2.size
-      println(s"$i ${v._2} -> ${v._1}")
-    })
+//    var i = 0
+//    sourceSet.foreach(v => {
+//      i += v._2.size
+//      println(s"$i ${v._2} -> ${v._1}")
+//    })
 
     val sourceData = intersectionPointsToDF(session, sourceSet, meetIndex, SOURCE)
     val destData = intersectionPointsToDF(session, destSet, meetIndex, DEST)
