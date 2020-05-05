@@ -4,7 +4,7 @@ import org.apache.spark.sql._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-//An easier model with less bookkeeping
+//An easier model with limited bookkeeping
   //Need to know if is current frontier
     //If yes dictionary of origin that can reach it -> the minRepetitionForCurrentRegexTerm
 case class VertexState[VD, ED]
@@ -79,11 +79,10 @@ object ReachabilityParallelResolver {
   }
 
   def vertexProgram[VD, ED](id: VertexId, vertexState: VertexState[VD, ED], searchMessage: SearchMessage[ED]): VertexState[VD, ED] = {
-    if (searchMessage.shouldCleanup) {
+    if (searchMessage.shouldCleanup)
+    {
+      println(s"Received shutdown message at $id")
       return vertexStateWithFlag(vertexState, flagVal = false)
-    }
-    if (searchMessage.isInitialMessage) {
-      return vertexStateWithFlag(vertexState, flagVal = true)
     }
 
     val globalFrontTerm = searchMessage.currentForwardIndex
@@ -97,7 +96,18 @@ object ReachabilityParallelResolver {
 
     var sourceMap = vertexState.sourceReachability
     var destMap = vertexState.destReachability
-    if (searchMessage.isForward) {
+    if (searchMessage.isInitialMessage)
+    {
+      println(s"Received initial message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
+      hasChanged = true
+      sourceMap = sourceMap.transform((_,_) => 0)
+      destMap = destMap.transform((_,_) => 0)
+      //println(s"Received initial message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
+    }
+    if (searchMessage.isForward)
+    {
+      println(s"Received forward message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
+
       if (searchMessage.currentForwardIndex != forwardVal) {
         hasChanged = true
         forwardVal = searchMessage.currentForwardIndex
@@ -304,7 +314,7 @@ object ReachabilityParallelResolver {
       sourceReach = 0
       sourceMap(vertexId) = 0
     }
-    if(query.sourceFilter((vertexId, vertexData)))
+    if(query.destFilter((vertexId, vertexData)))
     {
       destReach = query.pathExpression.length
       destMap(vertexId) = 0
@@ -334,8 +344,5 @@ object ReachabilityParallelResolver {
       .distinct()
       .map(row => VertexPair(row.getLong(0), row.getLong(1)))
       .collect()
-
-
-
   }
 }
