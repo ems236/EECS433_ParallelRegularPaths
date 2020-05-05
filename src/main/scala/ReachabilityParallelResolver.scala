@@ -118,7 +118,7 @@ object ReachabilityParallelResolver {
       oldState.globalPathRegex)
   }
 
-  def sendMessage[VD, ED, SearchMessage[ED]](edgeTriple: EdgeTriplet[VertexState[VD, ED], ED]): Iterator[(VertexId, SearchMessage[ED])] =
+  def sendMessage[VD, ED](edgeTriple: EdgeTriplet[VertexState[VD, ED], ED]): Iterator[(VertexId, SearchMessage[ED])] =
   {
     val globalFrontIndex = edgeTriple.srcAttr.globalFrontTerm
     val globalBackIndex = edgeTriple.srcAttr.globalBackTerm
@@ -144,7 +144,7 @@ object ReachabilityParallelResolver {
       }
       message ++= Iterator((edgeTriple.dstId, shutdownMessage(globalFrontIndex, globalBackIndex, pathRegex)))
     }
-    
+
     message
   }
 
@@ -206,6 +206,24 @@ object ReachabilityParallelResolver {
       isInitialMessage = false,
       isForward = false,
       isBackward = true
+    )
+  }
+
+  def mergeMessage[VD, ED](left: SearchMessage[ED], right: SearchMessage[ED]) : SearchMessage[ED] =
+  {
+    addAllOrigins(left.newBackSources, right.newBackSources)
+    addAllOrigins(left.newFrontSources, right.newFrontSources)
+
+    SearchMessage[ED](
+      left.pathRegex,
+      left.currentForwardIndex,
+      left.currentBackwardIndex,
+      left.newFrontSources,
+      left.newBackSources,
+      shouldCleanup = left.shouldCleanup && right.shouldCleanup,
+      isInitialMessage = false,
+      isForward = left.isForward || right.isForward,
+      isBackward = left.isBackward || right.isBackward
     )
   }
 
