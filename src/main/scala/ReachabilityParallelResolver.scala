@@ -39,13 +39,41 @@ object ReachabilityParallelResolver {
     //I'm sure it gets parallelized anyway
     var statusGraph = graph.mapVertices((v, data) => initializeVertex(v, data, reachabilityQuery))
 
+    var start = 0
+    var end = reachabilityQuery.pathExpression.length
     //bidirectional search
-    // while start != end
-    //Pregel to expand both frontiers by 1
-    //Have some care to not overshoot
+    while (start < end)
+    {
+      var startVal = start + 1
+      var endVal = end - 1
+      if(start + 1 == end)
+      {
+        //Have some care to not overshoot
+        //Want to meet in the middle without unnecessary work
+        //Would probably be better to count the size of each frontier, but this is fine
+        endVal = -1
+      }
+      //Pregel to expand both frontiers by 1
+
+      val initialMessage = SearchMessage[ED](
+        reachabilityQuery.pathExpression,
+        startVal,
+        endVal,
+        mutable.Map(),
+        mutable.Map(),
+        shouldCleanup = false,
+        isInitialMessage = true,
+        isForward = false,
+        isBackward = false
+      )
+      Pregel.apply(statusGraph, initialMessage)(vertexProgram, sendMessage, mergeMessage)
+
+      start += 1
+      end -= 1
+    }
 
     //Extract results where they meet in the middle
-    //Pregel.apply()
+    //meet index is start
   }
 
   def vertexProgram[VD, ED](id: VertexId, vertexState: VertexState[VD, ED], searchMessage: SearchMessage[ED]): VertexState[VD, ED] = {
@@ -150,7 +178,8 @@ object ReachabilityParallelResolver {
 
     if(edgeTriple.dstAttr.hasChanged)
     {
-      if(isValidDestEdge(edgeTriple, pathRegex, globalFrontIndex))
+      //Sending -1 makes this side not do anything
+      if(globalBackIndex > 0 && isValidDestEdge(edgeTriple, pathRegex, globalBackIndex))
       {
         val toSrcMsg = backwardMessage(edgeTriple.dstAttr.destReachability.clone(), globalFrontIndex, globalBackIndex, pathRegex)
         message ++= Iterator((edgeTriple.srcId, toSrcMsg))
@@ -264,8 +293,8 @@ object ReachabilityParallelResolver {
 
   def initializeVertex[VD, ED](vertexId: VertexId, vertexData: VD, query: ReachabilityQuery[VD, ED]) : VertexState[VD, ED] =
   {
-    var sourceReach = -1
-    var destReach = -1
+    var sourceReach = 0
+    var destReach = query.pathExpression.length - 1
     val sourceMap = mutable.Map[VertexId, Int]()
     val destMap = mutable.Map[VertexId, Int]()
     if(query.sourceFilter((vertexId, vertexData)))
