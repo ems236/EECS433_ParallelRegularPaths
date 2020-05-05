@@ -2,6 +2,7 @@ import org.apache.spark.graphx.{EdgeTriplet, VertexId, _}
 import org.apache.spark.sql._
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 //An easier model with less bookkeeping
   //Need to know if is current frontier
@@ -33,7 +34,7 @@ case class SearchMessage[ED]
 )
 
 object ReachabilityParallelResolver {
-  def ResolveQuery[VD, ED](session: SparkSession, graph: Graph[VD, ED], reachabilityQuery: ReachabilityQuery[VD, ED]): Array[VertexPair] = {
+  def ResolveQuery[VD, ED:ClassTag](session: SparkSession, graph: Graph[VD, ED], reachabilityQuery: ReachabilityQuery[VD, ED]): Array[VertexPair] = {
     //Could do Pregel to id source and dest set
     //Need a convenient vertex structure anyway so map vertices is more appropriate
     //I'm sure it gets parallelized anyway
@@ -166,7 +167,7 @@ object ReachabilityParallelResolver {
     val globalBackIndex = edgeTriple.srcAttr.globalBackTerm
     val pathRegex = edgeTriple.srcAttr.globalPathRegex
 
-    var message = Iterator.empty
+    var message = Iterator[(VertexId, SearchMessage[ED])]()
     if(edgeTriple.srcAttr.hasChanged)
     {
       if(isValidSourceEdge(edgeTriple, pathRegex, globalFrontIndex))
