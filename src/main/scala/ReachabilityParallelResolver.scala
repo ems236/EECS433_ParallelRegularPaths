@@ -81,7 +81,7 @@ object ReachabilityParallelResolver {
   def vertexProgram[VD, ED](id: VertexId, vertexState: VertexState[VD, ED], searchMessage: SearchMessage[ED]): VertexState[VD, ED] = {
     if (searchMessage.shouldCleanup)
     {
-      println(s"Received shutdown message at $id")
+      //println(s"Received shutdown message at $id")
       return vertexStateWithFlag(vertexState, flagVal = false)
     }
 
@@ -98,7 +98,7 @@ object ReachabilityParallelResolver {
     var destMap = vertexState.destReachability
     if (searchMessage.isInitialMessage)
     {
-      println(s"Received initial message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
+      //println(s"Received initial message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
       hasChanged = true
       sourceMap = sourceMap.transform((_,_) => 0)
       destMap = destMap.transform((_,_) => 0)
@@ -106,18 +106,21 @@ object ReachabilityParallelResolver {
     }
     if (searchMessage.isForward)
     {
-      println(s"Received forward message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
-
+      //println(s"Received forward message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
       if (searchMessage.currentForwardIndex != forwardVal) {
         hasChanged = true
         forwardVal = searchMessage.currentForwardIndex
         //Clone to be safe
-        sourceMap = searchMessage.newFrontSources.clone().transform((_,_) => 0)
+        sourceMap = searchMessage.newFrontSources.clone().transform((_,_) => 1)
       }
       else
       {
+        //Should detect cycles
+        println(s"Received forward message at frontier $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
         val regexTerm = searchMessage.pathRegex(forwardVal - 1)
+        println(s"${searchMessage.newFrontSources}")
         val updated = incrementMapBelowLimit(searchMessage.newFrontSources, regexTerm)
+        println(s"$updated")
         val didSourcesChange = addAllOrigins(vertexState.sourceReachability, updated)
         hasChanged = hasChanged || didSourcesChange
       }
@@ -128,7 +131,7 @@ object ReachabilityParallelResolver {
         hasChanged = true
         backwardVal = searchMessage.currentBackwardIndex
         //Clone to be safe
-        destMap = searchMessage.newBackSources.clone().transform((_,_) => 0)
+        destMap = searchMessage.newBackSources.clone().transform((_,_) => 1)
       }
       else
       {
