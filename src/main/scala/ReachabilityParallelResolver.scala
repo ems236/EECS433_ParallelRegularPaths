@@ -66,7 +66,7 @@ object ReachabilityParallelResolver {
         isForward = false,
         isBackward = false
       )
-      Pregel.apply(statusGraph, initialMessage)(vertexProgram, sendMessage, mergeMessage)
+      statusGraph = Pregel.apply(statusGraph, initialMessage)(vertexProgram, sendMessage, mergeMessage)
 
       start += 1
       end -= 1
@@ -74,6 +74,7 @@ object ReachabilityParallelResolver {
 
     //Extract results where they meet in the middle
     //meet index is start
+    extractResults(session, statusGraph, start)
   }
 
   def vertexProgram[VD, ED](id: VertexId, vertexState: VertexState[VD, ED], searchMessage: SearchMessage[ED]): VertexState[VD, ED] = {
@@ -308,8 +309,32 @@ object ReachabilityParallelResolver {
       destMap(vertexId) = 0
     }
 
-    VertexState(vertexData, sourceReach, sourceMap, destReach, destMap, false, 0, query.pathExpression.length, query.pathExpression)
+    VertexState(vertexData, sourceReach, sourceMap, destReach, destMap, hasChanged = false, 0, query.pathExpression.length, query.pathExpression)
   }
 
+  def extractResults[VD, ED](session: SparkSession, graph: Graph[VertexState[VD, ED], ED], meetIndex: Int) : Array[VertexPair] = {
+    import session.implicits._
+    val SOURCE = "source"
+    val DEST = "dest"
 
+    val sourceData = graph.vertices
+      .filter(v => v._2.frontTermNumber == meetIndex)
+      .flatMap(v => v._2.sourceReachability.keySet.toSeq.map(origin => (v._1, origin)))
+      .toDF("Id", SOURCE)
+
+    val destData = graph.vertices
+      .filter(v => v._2.backTermNumber == meetIndex)
+      .flatMap(v => v._2.destReachability.keySet.toSeq.map(origin => (v._1, origin)))
+      .toDF("Id", DEST)
+
+    sourceData
+      .join(destData, "Id")
+      .select(SOURCE, DEST)
+      .distinct()
+      .map(row => VertexPair(row.getLong(0), row.getLong(1)))
+      .collect()
+
+
+
+  }
 }
