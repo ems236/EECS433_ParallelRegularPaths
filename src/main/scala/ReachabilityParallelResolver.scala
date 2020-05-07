@@ -77,7 +77,7 @@ object ReachabilityParallelResolver {
   def vertexProgram[VD, ED](id: VertexId, vertexState: VertexState[VD, ED], searchMessage: SearchMessage[ED]): VertexState[VD, ED] = {
     val globalFrontTerm = searchMessage.currentForwardIndex
     val globalBackTerm = searchMessage.currentBackwardIndex
-    
+
     if (searchMessage.shouldCleanup)
     {
       //println(s"Received shutdown message at $id")
@@ -87,7 +87,6 @@ object ReachabilityParallelResolver {
 
       return vertexShutdown(vertexState, shouldEmptyForward = clearFront, shouldEmptyBackward = clearBack)
     }
-
 
 
     //Don't need to do much.

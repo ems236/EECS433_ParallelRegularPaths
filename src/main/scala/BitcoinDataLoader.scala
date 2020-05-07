@@ -2,13 +2,13 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql._
-
 import org.apache.spark.graphx.Pregel
 import org.apache.spark.graphx.Graph
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.GraphLoader
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 object BitcoinDataLoader {
   val PATH = "/home/ellis/shareddata/School/databases/project/regular_path_queries/src/soc-sign-bitcoinotc.csv"
@@ -47,7 +47,7 @@ object BitcoinDataLoader {
 
     val edges : EdgeRDD[BitcoinEdgeAttribute] = EdgeRDD.fromEdges(edge_data.rdd)
 
-    val graph: Graph[Int, BitcoinEdgeAttribute] = Graph.fromEdges(edges, defaultValue = 0)
+    val graph: Graph[Int, BitcoinEdgeAttribute] = Graph.fromEdges(edges, defaultValue = 0, vertexStorageLevel = StorageLevel.MEMORY_AND_DISK, edgeStorageLevel = StorageLevel.MEMORY_AND_DISK)
 
     return graph
   }
