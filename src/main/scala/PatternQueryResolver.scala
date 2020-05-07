@@ -5,14 +5,14 @@ import scala.reflect.ClassTag
 
 object PatternQueryResolver
 {
-  def ResolveQuery[VD, ED:ClassTag](session: SparkSession, graph: Graph[VD, ED], query: Graph[VD => Boolean, ReachabilityQuery[VD, ED]]) : Graph[VertexId, Array[VertexPair]] =
+  def ResolveQuery[VD, ED:ClassTag](session: SparkSession, graph: Graph[VD, ED], query: Graph[VD => Boolean, Array[PathRegexTerm[ED]]]) : Graph[VertexId, Array[VertexPair]] =
   {
     //Initialize match sets
     val queryGraph = query.mapVertices((id, predicate) => graph.vertices.filter(data => predicate(data._2)).map(v => v._1).collect().toSet)
     //Just let pregel go and see what happens
     val results = Pregel.apply(queryGraph, Set[VertexId](), activeDirection = EdgeDirection.In)(vertexFunction, sendMessageFactory(graph, session), mergeMessage)
     results
-      .mapTriplets(e => reachabilityQueryWithMatchSets(session, graph, e.attr.pathExpression, e.srcAttr, e.dstAttr))
+      .mapTriplets(e => reachabilityQueryWithMatchSets(session, graph, e.attr, e.srcAttr, e.dstAttr))
       .mapVertices((id, data) => id)
   }
 
@@ -27,12 +27,12 @@ object PatternQueryResolver
   }
 
   def sendMessageFactory[VD, ED:ClassTag](graph: Graph[VD, ED], session: SparkSession):
-    EdgeTriplet[Set[VertexId], ReachabilityQuery[VD, ED]] => Iterator[(VertexId, Set[VertexId])] =
+    EdgeTriplet[Set[VertexId], Array[PathRegexTerm[ED]]] => Iterator[(VertexId, Set[VertexId])] =
   {
-    def sendMessage(edgeTriple: EdgeTriplet[Set[VertexId], ReachabilityQuery[VD, ED]]) : Iterator[(VertexId, Set[VertexId])] =
+    def sendMessage(edgeTriple: EdgeTriplet[Set[VertexId], Array[PathRegexTerm[ED]]]) : Iterator[(VertexId, Set[VertexId])] =
     {
       //Ridiculous nested Pregel
-      val results = reachabilityQueryWithMatchSets(session, graph, edgeTriple.attr.pathExpression, edgeTriple.srcAttr, edgeTriple.dstAttr)
+      val results = reachabilityQueryWithMatchSets(session, graph, edgeTriple.attr, edgeTriple.srcAttr, edgeTriple.dstAttr)
       val sourceRmv = edgeTriple.srcAttr.diff(results.map(pair => pair.source).toSet)
 
       if(sourceRmv.nonEmpty)

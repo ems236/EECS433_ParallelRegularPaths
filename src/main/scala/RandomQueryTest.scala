@@ -27,7 +27,7 @@ object RandomQueryTest
       val query = ReachabilityQuery[Int, BitcoinEdgeAttribute](v => true, v => true, reachabilityRegex)
 
 
-      //Dont even bother with sequential
+      //Dont even bother with sequential because it's unreasonably slow
       //var start = System.currentTimeMillis()
       //val results = ReachabilitySequentialResolver.ResolveQuery(spark, graph, query)
       //var stop = System.currentTimeMillis()
@@ -41,12 +41,6 @@ object RandomQueryTest
 
       totalParallelTime = totalParallelTime + stop - start
       totalResults = totalResults + results2.size
-
-      //val r1 = spark.sparkContext.parallelize(results)
-      //val r2 = spark.sparkContext.parallelize(results2)
-
-      //println(s"diff 2 - 1 = ${r2.subtract(r1).count()}")
-      //println(s"diff 1 - 2 = ${r1.subtract(r2).count()}")
     }
 
     println(s"Time: ${totalParallelTime / 10}")
