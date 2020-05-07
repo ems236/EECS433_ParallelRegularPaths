@@ -118,11 +118,11 @@ object ReachabilityParallelResolver {
       else
       {
         //Should detect cycles
-        println(s"Received forward message at frontier $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
+        //println(s"Received forward message at frontier $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
         val regexTerm = searchMessage.pathRegex(forwardVal - 1)
-        println(s"${searchMessage.newFrontSources}")
+        //println(s"${searchMessage.newFrontSources}")
         val updated = incrementMapBelowLimit(searchMessage.newFrontSources, regexTerm)
-        println(s"$updated")
+        //println(s"$updated")
         val didSourcesChange = addAllOrigins(vertexState.sourceReachability, updated)
         hasChanged = hasChanged || didSourcesChange
       }

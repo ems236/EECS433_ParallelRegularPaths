@@ -28,11 +28,12 @@ object SimpleApp {
     val testRegex = new PathRegexTerm[BitcoinEdgeAttribute](e => e.trust == -5, Some(1))
     val testQuery = ReachabilityQuery[Int, BitcoinEdgeAttribute](_ => true, _ => true, Array(testRegex))
 
-    //val results = ReachabilitySequentialResolver.ResolveQuery(spark, graph, testQuery)
-    val results = ReachabilityParallelResolver.ResolveQuery(spark, graph, testQuery)
+    val results = ReachabilitySequentialResolver.ResolveQuery(spark, graph, testQuery)
+    val results2 = ReachabilityParallelResolver.ResolveQuery(spark, graph, testQuery)
 
     println(results.length)
-    results.sortBy(v => v.source).foreach(v => println(s"(${v.source}, ${v.dest})"))
+    println(results2.length)
+    //results.sortBy(v => v.source).foreach(v => println(s"(${v.source}, ${v.dest})"))
 
     spark.stop()
   }

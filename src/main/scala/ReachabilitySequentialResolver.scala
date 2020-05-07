@@ -120,9 +120,9 @@ object ReachabilitySequentialResolver
     {
       //Dont visit the same vertex twice from the same places
 
-      println(s"newOriginSet $originSet")
+      //println(s"newOriginSet $originSet")
       val oldTermSet = termFrontier(newVertex)
-      println(s"old set $oldTermSet")
+      //println(s"old set $oldTermSet")
       val oldLength = oldTermSet.size
       oldTermSet ++= originSet
 
