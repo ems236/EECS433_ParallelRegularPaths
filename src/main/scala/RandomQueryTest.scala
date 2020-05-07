@@ -21,16 +21,26 @@ object RandomQueryTest
     val query = ReachabilityQuery[Int, BitcoinEdgeAttribute](v => true, v => true, reachabilityRegex)
 
     var start = System.currentTimeMillis()
-    var results = ReachabilitySequentialResolver.ResolveQuery(spark, graph, query)
+    val results = ReachabilitySequentialResolver.ResolveQuery(spark, graph, query)
     var stop = System.currentTimeMillis()
     println(s"Sequential time ${stop - start}, length ${results.size}")
     //results.sortBy(v => v.source).foreach(v => println(s"(${v.source}, ${v.dest})"))
 
     start = System.currentTimeMillis()
-    results = ReachabilityParallelResolver.ResolveQuery(spark, graph, query)
+    val results2 = ReachabilityParallelResolver.ResolveQuery(spark, graph, query)
     stop = System.currentTimeMillis()
-    println(s"Parallel time ${stop - start}, length ${results.size}")
+    println(s"Parallel time ${stop - start}, length ${results2.size}")
     //results.sortBy(v => v.source).foreach(v => println(s"(${v.source}, ${v.dest})"))
+
+    val r1 = spark.sparkContext.parallelize(results)
+    val r2 = spark.sparkContext.parallelize(results2)
+
+    //Really hope these are about the same
+    r2.subtract(r1).sortBy(v => v.source).foreach(v => println(s"(${v.source}, ${v.dest})"))
+    r1.subtract(r2).sortBy(v => v.source).foreach(v => println(s"(${v.source}, ${v.dest})"))
+
+
+
     spark.stop()
   }
 }
