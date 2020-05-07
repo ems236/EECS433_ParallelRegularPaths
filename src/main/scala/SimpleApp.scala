@@ -12,7 +12,7 @@ object SimpleApp {
     val spark = SparkSession.builder.appName("Simple Application").getOrCreate()
     val sc = spark.sparkContext
 
-    spark.sparkContext.setLogLevel("WARN")
+    //spark.sparkContext.setLogLevel("WARN")
     /*
     val logData = spark.read.textFile(logFile).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
@@ -58,6 +58,7 @@ object SimpleApp {
     val defaultUser = "F"
     // Build the initial Graph
     val graph = Graph(users, relationships, defaultUser)
+    println(graph.vertices.count())
 
 
     val querydata: Array[(VertexId, String => Boolean)] =
@@ -68,7 +69,7 @@ object SimpleApp {
     val queryNodes = sc.parallelize(querydata)
 
     val fnRegex = Array(new PathRegexTerm[String](s => s == "fn", Some(1)))
-    val faRegex = Array(new PathRegexTerm[String](s => s == "fa", None))
+    val faRegex = Array(new PathRegexTerm[String](s => s == "fa", Some(3)))
     val faSnRegex = Array(new PathRegexTerm[String](s => s == "fa", Some(2))
       , new PathRegexTerm[String](s => s == "sn", Some(1)))
     val faSaRegex = Array(new PathRegexTerm[String](s => s == "fa", Some(2))
