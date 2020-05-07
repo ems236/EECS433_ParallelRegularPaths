@@ -63,14 +63,14 @@ object ReachabilitySequentialResolver
     val hasLimit = regexTerm.hasLimit()
     val expandCount = regexTerm.limitVal()
 
-    var reachedCount = 0
+    //var reachedCount = 0
 
     //do their expansion in a while loop until its done
     var currentCount = 0
     var nextIterationFrontier: mutable.Map[VertexId, Set[VertexId]] = mutable.Map()
     while (currentIterationFrontier.nonEmpty && (!hasLimit || currentCount < expandCount))
     {
-      println(s"Frontier has ${currentIterationFrontier.size} elements. Current is $currentCount. Limit is $expandCount")
+      //println(s"Frontier has ${currentIterationFrontier.size} elements. Current is $currentCount. Limit is $expandCount")
       for(vertex <- currentIterationFrontier)
       {
         //println(s"Exploring from vertex ${vertex._1}")
@@ -85,19 +85,19 @@ object ReachabilitySequentialResolver
 
         for(newVertex <- newVertices)
         {
-          println(s"New Vertex reached ${vertex._1} to ${newVertex}")
-          reachedCount += 1
+          //println(s"New Vertex reached ${vertex._1} to ${newVertex}")
+          //reachedCount += 1
           val shouldAdd = reachNewVertex(newVertex, newFrontier, vertex._2)
           //add to new frontier
           if (shouldAdd)
           {
-              println("Adding to new frontier")
+              //println("Adding to new frontier")
               nextIterationFrontier(newVertex) = newFrontier(newVertex).toSet
           }
         }
       }
 
-      println(s"Have reached $reachedCount")
+      //println(s"Have reached $reachedCount")
       //collect new frontier into frontier
       currentIterationFrontier = nextIterationFrontier
       nextIterationFrontier = mutable.Map()
@@ -109,7 +109,7 @@ object ReachabilitySequentialResolver
     //Clear all reachability info for non-frontier
     //clearOldFrontier(currentFrontier, previousIndex)
     //addNewFrontier(currentFrontier, termFrontier)
-    return newFrontier
+    newFrontier
   }
 
   def reachNewVertex(newVertex: VertexId, termFrontier: mutable.Map[VertexId, OriginSet], originSet:  Set[VertexId]): Boolean =
@@ -179,7 +179,7 @@ object ReachabilitySequentialResolver
       .toSeq
       .flatMap(v => v._2.toSeq.map(origin => (v._1, origin)))
 
-    println(s"Flat size is ${flattened.size}")
+    //println(s"Flat size is ${flattened.size}")
     flattened.toDF("Id", description)
   }
 
@@ -189,7 +189,7 @@ object ReachabilitySequentialResolver
     val SOURCE = "source"
     val DEST = "dest"
 
-    println(s"Joining source ${sourceSet.keySet.size} to dest ${destSet.keySet.size}")
+    //println(s"Joining source ${sourceSet.keySet.size} to dest ${destSet.keySet.size}")
 
 //    var i = 0
 //    sourceSet.foreach(v => {
@@ -200,7 +200,7 @@ object ReachabilitySequentialResolver
     val sourceData = intersectionPointsToDF(session, sourceSet, meetIndex, SOURCE)
     val destData = intersectionPointsToDF(session, destSet, meetIndex, DEST)
 
-    println(s"Joining source ${sourceData.count()} to dest ${destData.count()}")
+    //println(s"Joining source ${sourceData.count()} to dest ${destData.count()}")
 
     //join both
     //flatten essentially makes this cartesian product of two origin sets

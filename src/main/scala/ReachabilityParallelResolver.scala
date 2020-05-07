@@ -28,9 +28,7 @@ case class SearchMessage[ED]
   newFrontSources: mutable.Map[VertexId, Int],
   newBackSources: mutable.Map[VertexId, Int],
   shouldCleanup: Boolean,
-  isInitialMessage: Boolean,
-  isForward: Boolean,
-  isBackward: Boolean
+  isInitialMessage: Boolean
 )
 
 object ReachabilityParallelResolver {
@@ -63,9 +61,7 @@ object ReachabilityParallelResolver {
         mutable.Map(),
         mutable.Map(),
         shouldCleanup = false,
-        isInitialMessage = true,
-        isForward = false,
-        isBackward = false
+        isInitialMessage = true
       )
       statusGraph = Pregel.apply(statusGraph, initialMessage)(vertexProgram, sendMessage, mergeMessage)
 
@@ -79,14 +75,20 @@ object ReachabilityParallelResolver {
   }
 
   def vertexProgram[VD, ED](id: VertexId, vertexState: VertexState[VD, ED], searchMessage: SearchMessage[ED]): VertexState[VD, ED] = {
+    val globalFrontTerm = searchMessage.currentForwardIndex
+    val globalBackTerm = searchMessage.currentBackwardIndex
+
     if (searchMessage.shouldCleanup)
     {
       //println(s"Received shutdown message at $id")
-      return vertexStateWithFlag(vertexState, flagVal = false)
+      //Free resources if reasonable
+      val clearFront = globalFrontTerm != vertexState.frontTermNumber
+      val clearBack = globalBackTerm != -1 && globalBackTerm != vertexState.backTermNumber
+
+      return vertexShutdown(vertexState, shouldEmptyForward = clearFront, shouldEmptyBackward = clearBack)
     }
 
-    val globalFrontTerm = searchMessage.currentForwardIndex
-    val globalBackTerm = searchMessage.currentBackwardIndex
+
 
     //Don't need to do much.
     //Update local state with new data
@@ -100,18 +102,18 @@ object ReachabilityParallelResolver {
     {
       //println(s"Received initial message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
       hasChanged = true
-      sourceMap = sourceMap.transform((_,_) => 0)
-      destMap = destMap.transform((_,_) => 0)
+      sourceMap = sourceMap.transform((_,_) => 1)
+      destMap = destMap.transform((_,_) => 1)
       //println(s"Received initial message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
     }
-    if (searchMessage.isForward)
+    if (searchMessage.newFrontSources.nonEmpty)
     {
       //println(s"Received forward message at $id.  Sources size is ${sourceMap.size} Dests size is ${destMap.size}")
       if (searchMessage.currentForwardIndex != forwardVal) {
         hasChanged = true
         forwardVal = searchMessage.currentForwardIndex
         //Clone to be safe
-        sourceMap = searchMessage.newFrontSources.clone().transform((_,_) => 1)
+        sourceMap = searchMessage.newFrontSources.clone()
       }
       else
       {
@@ -126,12 +128,12 @@ object ReachabilityParallelResolver {
       }
     }
 
-    if (searchMessage.isBackward) {
+    if (searchMessage.newBackSources.nonEmpty) {
       if (searchMessage.currentBackwardIndex != backwardVal) {
         hasChanged = true
         backwardVal = searchMessage.currentBackwardIndex
         //Clone to be safe
-        destMap = searchMessage.newBackSources.clone().transform((_,_) => 1)
+        destMap = searchMessage.newBackSources.clone()
       }
       else
       {
@@ -161,14 +163,14 @@ object ReachabilityParallelResolver {
       .retain((_,increment) => !regexTerm.hasLimit() || increment <= regexTerm.limitVal())
   }
 
-  def vertexStateWithFlag[VD, ED](oldState: VertexState[VD, ED], flagVal: Boolean): VertexState[VD, ED] = {
+  def vertexShutdown[VD, ED](oldState: VertexState[VD, ED], shouldEmptyForward: Boolean, shouldEmptyBackward: Boolean): VertexState[VD, ED] = {
     VertexState[VD, ED](
       oldState.data,
       oldState.frontTermNumber,
-      oldState.sourceReachability,
+      {if (shouldEmptyForward) mutable.Map[VertexId, Int]() else oldState.sourceReachability},
       oldState.backTermNumber,
-      oldState.destReachability,
-      flagVal,
+      {if (shouldEmptyBackward) mutable.Map[VertexId, Int]() else oldState.destReachability},
+      false,
       oldState.globalFrontTerm,
       oldState.globalBackTerm,
       oldState.globalPathRegex)
@@ -230,9 +232,7 @@ object ReachabilityParallelResolver {
         mutable.Map[VertexId, Int](),
         mutable.Map[VertexId, Int](),
         shouldCleanup = true,
-        isInitialMessage = false,
-        isForward = false,
-        isBackward = false
+        isInitialMessage = false
       )
   }
 
@@ -245,9 +245,7 @@ object ReachabilityParallelResolver {
       originData,
       mutable.Map[VertexId, Int](),
       shouldCleanup = false,
-      isInitialMessage = false,
-      isForward = true,
-      isBackward = false
+      isInitialMessage = false
     )
   }
 
@@ -260,9 +258,7 @@ object ReachabilityParallelResolver {
       mutable.Map[VertexId, Int](),
       originData,
       shouldCleanup = false,
-      isInitialMessage = false,
-      isForward = false,
-      isBackward = true
+      isInitialMessage = false
     )
   }
 
@@ -278,9 +274,7 @@ object ReachabilityParallelResolver {
       left.newFrontSources,
       left.newBackSources,
       shouldCleanup = left.shouldCleanup && right.shouldCleanup,
-      isInitialMessage = false,
-      isForward = left.isForward || right.isForward,
-      isBackward = left.isBackward || right.isBackward
+      isInitialMessage = false
     )
   }
 
@@ -308,18 +302,16 @@ object ReachabilityParallelResolver {
 
   def initializeVertex[VD, ED](vertexId: VertexId, vertexData: VD, query: ReachabilityQuery[VD, ED]) : VertexState[VD, ED] =
   {
-    var sourceReach = 0
-    var destReach = query.pathExpression.length - 1
+    val sourceReach = 0
+    val destReach = query.pathExpression.length
     val sourceMap = mutable.Map[VertexId, Int]()
     val destMap = mutable.Map[VertexId, Int]()
     if(query.sourceFilter((vertexId, vertexData)))
     {
-      sourceReach = 0
       sourceMap(vertexId) = 0
     }
     if(query.destFilter((vertexId, vertexData)))
     {
-      destReach = query.pathExpression.length
       destMap(vertexId) = 0
     }
 
