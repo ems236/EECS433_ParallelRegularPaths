@@ -91,7 +91,7 @@ object SimpleApp {
     val query = Graph(queryNodes, queryEdges, defaultVal)
 
     val results = PatternQueryResolver.ResolveQuery(spark, graph, query)
-    results.edges.foreach(e => println(e))
+    results.edges.foreach(e => {println(s"${e.srcId}, ${e.dstId} and set"); e.attr.foreach(p => println(s"(${p.source}, ${p.dest})"))})
 
     spark.stop()
   }
