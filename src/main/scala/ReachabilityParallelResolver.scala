@@ -32,7 +32,7 @@ case class SearchMessage[ED]
 )
 
 object ReachabilityParallelResolver {
-  def ResolveQuery[VD, ED:ClassTag](session: SparkSession, graph: Graph[VD, ED], reachabilityQuery: ReachabilityQuery[VD, ED]): Array[VertexPair] = {
+  def ResolveQuery[VD, ED:ClassTag](session: SparkSession, graph: Graph[VD, ED], reachabilityQuery: ReachabilityQuery[VD, ED], inMemoryJoin: Boolean = false): Array[VertexPair] = {
     //Could do Pregel to id source and dest set
     //Need a convenient vertex structure anyway so map vertices is more appropriate
     //I'm sure it gets parallelized anyway
@@ -71,7 +71,18 @@ object ReachabilityParallelResolver {
 
     //Extract results where they meet in the middle
     //meet index is start
-    extractResults(session, statusGraph, start)
+
+    //Something with RDDS goes wrong when using this from pattern matching
+    //Has something to do with broadcast values but I really can't figure out what
+    //Pass a flag to do it without RDDS
+    if(inMemoryJoin)
+    {
+      extractResultsInMemory(session, statusGraph, start)
+    }
+    else
+    {
+      extractResults(session, statusGraph, start)
+    }
   }
 
   def vertexProgram[VD, ED](id: VertexId, vertexState: VertexState[VD, ED], searchMessage: SearchMessage[ED]): VertexState[VD, ED] = {
@@ -338,5 +349,24 @@ object ReachabilityParallelResolver {
       .distinct()
       .map(row => VertexPair(row.getLong(0), row.getLong(1)))
       .collect()
+  }
+
+  def extractResultsInMemory[VD, ED](session: SparkSession, graph: Graph[VertexState[VD, ED], ED], meetIndex: Int) : Array[VertexPair] = {
+
+    val sourceData = graph.vertices
+      .collect()
+      .filter(v => v._2.frontTermNumber == meetIndex)
+      .flatMap(v => v._2.sourceReachability.keySet.toSeq.map(origin => (v._1, origin)))
+
+    val destData = graph.vertices
+      .collect()
+      .filter(v => v._2.backTermNumber == meetIndex)
+      .flatMap(v => v._2.destReachability.keySet.toSeq.map(origin => (v._1, origin)))
+
+    //In memory join
+    sourceData
+      .flatMap(s => destData.filter(d => s._1 == d._1).map(d => (s._2, d._2)))
+      .distinct
+      .map(s => VertexPair(s._1, s._2))
   }
 }

@@ -18,12 +18,13 @@ object PatternQueryResolver
 
     val queryGraph = query
       .mapVertices((id, predicate) => broadcastGraph.value.vertices.filter(data => predicate(data._2)).map(v => v._1).collect().toSet)
+      .mapTriplets(t => {val test = t.attr; reachabilityQueryWithMatchSets(session, broadcastGraph, test, t.srcAttr, t.dstAttr)})
 
     //Just let pregel go and see what happens
     //Pregel.apply(statusGraph, initialMessage)(vertexProgram, sendMessage, mergeMessage)
-    val results = Pregel.apply(queryGraph, Set[VertexId](), activeDirection = EdgeDirection.In)(vertexFunction, sendMessageFactory(broadcastGraph, session), mergeMessage)
+    val results = Pregel.apply(queryGraph, Set[VertexId](), activeDirection = EdgeDirection.In)(vertexFunction, sendMessageStored, mergeMessage)
     results
-      .mapTriplets(e => reachabilityQueryWithMatchSets(session, broadcastGraph, e.attr, e.srcAttr, e.dstAttr))
+      .mapTriplets(e => e.attr.filter(p => e.srcAttr.contains(p.source) && e.dstAttr.contains(p.dest)))
       .mapVertices((id, data) => id)
   }
 
@@ -36,6 +37,23 @@ object PatternQueryResolver
   def mergeMessage(left: Set[VertexId], right: Set[VertexId]) : Set[VertexId] =
   {
     left.union(right)
+  }
+
+  def sendMessageStored(edgeTriple: EdgeTriplet[Set[VertexId], Array[VertexPair]]) : Iterator[(VertexId, Set[VertexId])] =
+  {
+    //Take every vertex in source attr that doesn't have a match in dest
+    val select = edgeTriple.attr.filter(p => edgeTriple.dstAttr.contains(p.dest))
+      .map(p => p.source).toSet
+    val rmv = edgeTriple.srcAttr.filter(v => !select.contains(v))
+
+    if (rmv.nonEmpty)
+    {
+      Iterator((edgeTriple.srcId, rmv))
+    }
+    else
+    {
+      Iterator[(VertexId, Set[VertexId])]()
+    }
   }
 
   def sendMessageFactory[VD, ED:ClassTag](graph: Broadcast[Graph[VD, ED]], session: SparkSession):
@@ -63,7 +81,7 @@ object PatternQueryResolver
   def reachabilityQueryWithMatchSets[VD, ED:ClassTag](session: SparkSession, graph: Broadcast[Graph[VD, ED]], query: Array[PathRegexTerm[ED]], matSource : Set[VertexId], matDest: Set[VertexId]) : Array[VertexPair] =
   {
     val newQuery = ReachabilityQuery[VD, ED](u1 => matSource(u1._1), u2 => matDest.contains(u2._1), query)
-    ReachabilityParallelResolver.ResolveQuery(session, graph.value, newQuery)
+    ReachabilityParallelResolver.ResolveQuery(session, graph.value, newQuery, inMemoryJoin = true)
   }
 
 }

@@ -12,7 +12,7 @@ object SimpleApp {
     val spark = SparkSession.builder.appName("Simple Application").getOrCreate()
     val sc = spark.sparkContext
 
-    //spark.sparkContext.setLogLevel("WARN")
+    spark.sparkContext.setLogLevel("WARN")
     /*
     val logData = spark.read.textFile(logFile).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
